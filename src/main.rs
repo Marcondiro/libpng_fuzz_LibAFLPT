@@ -4,10 +4,7 @@
 
 use std::{path::PathBuf, process, slice, time::Duration};
 
-#[cfg(feature = "tui")]
 use libafl::monitors::tui::TuiMonitor;
-#[cfg(not(feature = "tui"))]
-use libafl::monitors::SimpleMonitor;
 use libafl::{
     corpus::{InMemoryCorpus, OnDiskCorpus},
     events::SimpleEventManager,
@@ -73,9 +70,6 @@ pub fn main() {
     .unwrap();
 
     // The Monitor trait define how the fuzzer stats are displayed to the user
-    #[cfg(not(feature = "tui"))]
-    let mon = SimpleMonitor::new(|s| println!("{s}"));
-    #[cfg(feature = "tui")]
     let mon = TuiMonitor::builder()
         .title("libpng Fuzzer with Intel PT")
         .enhanced_graphics(false)

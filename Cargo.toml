@@ -3,12 +3,10 @@ name = "intel_pt_libpng"
 authors = ["Marco Cavenati <cavenatimarco@gmail.com>"]
 edition = "2021"
 
-[features]
-tui = ["libafl/tui_monitor"]
-
 [dependencies]
 libafl = { git = "https://github.com/AFLplusplus/LibAFL", rev = "b32557c8ae7e2300657de06382f2761f831c1963", features = [
   "intel_pt",
+  "tui_monitor",
 ] }
 libafl_bolts = { git = "https://github.com/AFLplusplus/LibAFL", rev = "b32557c8ae7e2300657de06382f2761f831c1963" }
 proc-maps = "0.4.0"
