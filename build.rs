@@ -8,18 +8,26 @@ fn main() {
 
     let libpng_dst = cmake::build("./third_party/libpng");
 
-    // Tell cargo to look for shared libraries in the specified directory
-    println!("cargo:rustc-link-search=native={}", libpng_dst.display());
+    // Link against the compiled libpng.a directly (not the system one)
+    let libpng_path = libpng_dst.join("lib").join("libpng.a");
+    println!("cargo:rustc-link-search=native={}", libpng_dst.join("lib").display());
     println!("cargo:rustc-link-lib=static=png");
+    
+    // Ensure we're using the right library by adding it explicitly
+    println!("cargo:rustc-link-arg={}", libpng_path.display());
 
     println!("cargo:rerun-if-changed=libpng_read_fuzzer.cc");
 
     let abseil_path = Path::new("third_party").join("abseil-cpp");
+    let libpng_include = Path::new("third_party").join("libpng");
+    
     cc::Build::new()
         .cpp(true)
         .flag("-std=c++17")
         .file("libpng_read_fuzzer.cc")
         .include(&abseil_path)
+        .include(&libpng_include)
+        .include(libpng_dst.join("include"))
         .compile("libpng_read_fuzzer");
 
     // The bindgen::Builder is the main entry point
