@@ -1457,7 +1457,9 @@ dependencies = [
 
 [[package]]
 name = "ptcov"
-version = "0.1.0"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb3eaa317b3e2956525a3094e5dd800a1242097e8299e4be08614ce6c409647e"
 dependencies = [
  "hashbrown 0.17.1",
  "iced-x86",

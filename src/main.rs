@@ -5,6 +5,7 @@
 use std::{path::PathBuf, process, slice, time::Duration};
 
 use libafl::monitors::tui::TuiMonitor;
+use libafl::monitors::SimpleMonitor;
 use libafl::{
     corpus::{InMemoryCorpus, OnDiskCorpus},
     events::SimpleEventManager,
@@ -75,10 +76,11 @@ pub fn main() {
     .unwrap();
 
     // The Monitor trait define how the fuzzer stats are displayed to the user
-    let mon = TuiMonitor::builder()
-        .title("libpng Fuzzer with Intel PT")
-        .enhanced_graphics(false)
-        .build();
+    // let mon = TuiMonitor::builder()
+    //     .title("libpng Fuzzer with Intel PT")
+    //     .enhanced_graphics(false)
+    //     .build();
+    let mon = SimpleMonitor::new(|c| println!("{c}"));
 
     // The event manager handle the various events generated during the fuzzing loop
     // such as the notification of the addition of a new item to the corpus
@@ -105,12 +107,22 @@ pub fn main() {
     // filter out all the dynamic libs
     let images = process_maps
         .iter()
-        .filter(|pm| pm.is_exec())
+        .filter(|pm| {
+            #[cfg(target_os = "linux")]
+            if pm.inode == 0 {
+                return false;
+            }
+            pm.is_exec()
+        })
         .filter(|pm| {
             pm.filename().is_some_and(|path| {
                 !path.to_string_lossy().contains("/usr/lib/")
                     && !path.to_string_lossy().starts_with("C:\\WINDOWS\\")
             })
+        })
+        .map(|a| {
+            println!("{a:?}");
+            a
         })
         .map(|pm| {
             let data = unsafe { slice::from_raw_parts(pm.start() as *const u8, pm.size()) };
@@ -127,8 +139,7 @@ pub fn main() {
         .collect::<Vec<_>>();
 
     #[cfg(target_os = "linux")]
-    let pt = IntelPT::builder()
-        .ip_filters(filters)
+    let mut pt = IntelPT::builder()
         .pid(Some(my_pid))
         .images(&images)
         .build()
@@ -143,6 +154,7 @@ pub fn main() {
 
     #[cfg(windows)]
     pt.set_thread_id(Some(my_tid));
+
     pt.set_ip_filters(&filters).unwrap();
 
     // Intel PT hook that will handle the setup of Intel PT for each execution and fill the map
