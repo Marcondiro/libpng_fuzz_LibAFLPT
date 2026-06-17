@@ -25,7 +25,12 @@ use libafl::{
 use libafl_bolts::{current_nanos, rands::StdRand, tuples::tuple_list, HasLen};
 use proc_maps::get_process_maps;
 
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+#[cfg(windows)]
+use windows::Win32::System::Threading::GetCurrentThreadId;
+
+extern "C" {
+    pub fn LLVMFuzzerTestOneInput(data: *const u8, size: usize) -> std::os::raw::c_int;
+}
 
 // Coverage map
 const MAP_SIZE: usize = 64 * 1024;
@@ -90,32 +95,56 @@ pub fn main() {
     }
 
     // Get the memory map of the current process
-    let my_pid = i32::try_from(process::id()).unwrap();
+    #[cfg_attr(
+        windows,
+        expect(clippy::useless_conversion, reason = "required on Linux")
+    )]
+    let my_pid = process::id().try_into().unwrap();
+
     let process_maps = get_process_maps(my_pid).unwrap();
     // filter out all the dynamic libs
-    let (images, filters) = process_maps
+    let images = process_maps
         .iter()
         .filter(|pm| pm.is_exec())
-        .filter(|pm| pm.inode != 0)
         .filter(|pm| {
-            pm.filename()
-                .is_some_and(|path| !path.to_string_lossy().contains("/usr/lib/"))
+            pm.filename().is_some_and(|path| {
+                !path.to_string_lossy().contains("/usr/lib/")
+                    && !path.to_string_lossy().starts_with("C:\\WINDOWS\\")
+            })
         })
         .map(|pm| {
             let data = unsafe { slice::from_raw_parts(pm.start() as *const u8, pm.size()) };
-            (
-                PtImage::new(data, pm.start() as u64),
-                pm.start() as u64..=(pm.start() + pm.size()) as u64,
-            )
+            PtImage::new(data, pm.start() as u64)
         })
-        .collect::<(Vec<_>, Vec<_>)>();
+        .collect::<Vec<_>>();
 
+    #[cfg(windows)]
+    let my_tid = unsafe { GetCurrentThreadId() };
+
+    let filters = images
+        .iter()
+        .map(|i| i.virtual_address_start()..=i.virtual_address_end())
+        .collect::<Vec<_>>();
+
+    #[cfg(target_os = "linux")]
     let pt = IntelPT::builder()
         .ip_filters(filters)
         .pid(Some(my_pid))
         .images(&images)
         .build()
         .unwrap();
+
+    #[cfg(windows)]
+    let mut pt = IntelPT::builder()
+        .pid(my_pid)
+        .images(&images)
+        .build()
+        .unwrap();
+
+    #[cfg(windows)]
+    pt.set_thread_id(Some(my_tid));
+    pt.set_ip_filters(&filters).unwrap();
+
     // Intel PT hook that will handle the setup of Intel PT for each execution and fill the map
     let pt_hook = unsafe {
         IntelPTHook::builder()
